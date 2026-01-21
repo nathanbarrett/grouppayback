@@ -71,10 +71,10 @@ export function useSettlements(state: Ref<AppState>, debounceMs: number = 2000) 
   let timeoutId: ReturnType<typeof setTimeout> | null = null
 
   const hasEnoughData = computed(() => {
-    const peopleWithItems = state.value.people.filter(
-      p => p.name.trim() !== '' && p.items.length > 0
-    )
-    return peopleWithItems.length >= 2
+    const namedPeople = state.value.people.filter(p => p.name.trim() !== '')
+    const totalCents = namedPeople.reduce((sum, p) => sum + calculateTotalCents(p), 0)
+    // Need at least 2 named people and some expenses to split
+    return namedPeople.length >= 2 && totalCents > 0
   })
 
   watch(
