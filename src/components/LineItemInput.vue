@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { ref, watch, onUnmounted } from 'vue'
 import type { LineItem } from '../types'
 
 const props = defineProps<{
@@ -13,6 +13,7 @@ const emit = defineEmits<{
 }>()
 
 const localAmount = ref('')
+let debounceTimeout: ReturnType<typeof setTimeout> | null = null
 
 function formatCentsToDisplay(cents: number): string {
   if (cents === 0) return ''
@@ -33,6 +34,20 @@ watch(() => props.item.amountCents, (newCents) => {
     localAmount.value = formatted
   }
 }, { immediate: true })
+
+function emitAmountUpdate() {
+  const cents = parseDisplayToCents(localAmount.value)
+  emit('update', { amountCents: cents })
+}
+
+function debouncedEmitAmount() {
+  if (debounceTimeout) {
+    clearTimeout(debounceTimeout)
+  }
+  debounceTimeout = setTimeout(() => {
+    emitAmountUpdate()
+  }, 300)
+}
 
 function onAmountInput(event: Event) {
   const input = event.target as HTMLInputElement
@@ -55,14 +70,27 @@ function onAmountInput(event: Event) {
   // Update local state and input value
   localAmount.value = value
   input.value = value
+
+  // Emit debounced update
+  debouncedEmitAmount()
 }
 
 function onAmountBlur() {
-  const cents = parseDisplayToCents(localAmount.value)
-  emit('update', { amountCents: cents })
+  // Clear any pending debounce and emit immediately
+  if (debounceTimeout) {
+    clearTimeout(debounceTimeout)
+    debounceTimeout = null
+  }
+  emitAmountUpdate()
   // Format the display after blur
-  localAmount.value = formatCentsToDisplay(cents)
+  localAmount.value = formatCentsToDisplay(parseDisplayToCents(localAmount.value))
 }
+
+onUnmounted(() => {
+  if (debounceTimeout) {
+    clearTimeout(debounceTimeout)
+  }
+})
 
 function updateName(name: string) {
   emit('update', { name })

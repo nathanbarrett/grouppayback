@@ -2,9 +2,12 @@
 
 body {
   margin: 0;
+  /* Use dvh for mobile browsers that support it, fallback to vh */
   min-height: 100vh;
+  min-height: 100dvh;
 }
 
 #app {
   min-height: 100vh;
+  min-height: 100dvh;
 }
