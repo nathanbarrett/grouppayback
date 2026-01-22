@@ -156,10 +156,10 @@ function hasUserData(state: AppState): boolean {
   )
 }
 
-function updateUrl(state: AppState): void {
+function updateUrl(state: AppState, isUrlTooLong: boolean): void {
   const url = new URL(window.location.href)
 
-  if (hasUserData(state)) {
+  if (hasUserData(state) && !isUrlTooLong) {
     const encoded = encodeState(state)
     url.searchParams.set('data', encoded)
   } else {
@@ -199,8 +199,8 @@ export function useUrlState() {
     return estimatedUrlLength > URL_LENGTH_LIMIT
   })
 
-  watch(state, (newState) => {
-    updateUrl(newState)
+  watch([state, isUrlTooLong], ([newState, tooLong]) => {
+    updateUrl(newState, tooLong)
   }, { deep: true, immediate: true })
 
   function addPerson(): void {

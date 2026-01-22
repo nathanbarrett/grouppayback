@@ -150,14 +150,13 @@ function confirmReset() {
               :person="person"
               :currency="currency"
               :can-remove="state.people.length > 1"
-              :disable-add-item="isUrlTooLong"
               @update-name="name => updatePersonName(person.id, name)"
               @add-item="addLineItem(person.id)"
               @remove-item="itemId => removeLineItem(person.id, itemId)"
               @update-item="(itemId, updates) => updateLineItem(person.id, itemId, updates)"
               @remove="removePerson(person.id)"
             />
-            <AddPersonButton :disabled="isUrlTooLong" @click="addPerson" />
+            <AddPersonButton @click="addPerson" />
           </div>
         </section>
 
