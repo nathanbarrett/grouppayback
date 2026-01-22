@@ -9,6 +9,8 @@
     "preview": "vite preview",
     "test": "vitest",
     "test:run": "vitest run",
+    "typecheck:app": "vue-tsc --noEmit -p tsconfig.app.json",
+    "typecheck:workers": "tsc --noEmit -p tsconfig.workers.json",
     "deploy": "npm run build && wrangler deploy",
     "deploy:prod": "npm run build && wrangler deploy --env production"
   },
@@ -17,6 +19,7 @@
     "vue": "^3.5.24"
   },
   "devDependencies": {
+    "@cloudflare/workers-types": "^4.20250115.0",
     "@tailwindcss/vite": "^4.1.18",
     "@types/node": "^24.10.1",
     "@vitejs/plugin-vue": "^6.0.1",

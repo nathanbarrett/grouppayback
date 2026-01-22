@@ -37,3 +37,6 @@ CLAUDE.md
 # Environment variables
 .env
 .env.local
+
+# Wrangler local state
+.wrangler/

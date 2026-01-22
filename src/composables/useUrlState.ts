@@ -192,6 +192,14 @@ function getStateFromUrl(): AppState | null {
   return null
 }
 
+/**
+ * Gets the ULID from URL if in ULID mode (?u=ULID)
+ */
+function getUlidFromUrl(): string | null {
+  const params = new URLSearchParams(window.location.search)
+  return params.get('u')
+}
+
 function hasUserData(state: AppState): boolean {
   if (state.eventName && state.eventName.trim() !== '') return true
   return state.people.some(person =>
@@ -226,17 +234,28 @@ function createDefaultState(): AppState {
 }
 
 // Conservative URL length limit (supports IE/Edge legacy and avoids truncation in messaging apps)
-const URL_LENGTH_LIMIT = 2000
+export const URL_LENGTH_LIMIT = 2000
 
 export function useUrlState() {
-  const initialState = getStateFromUrl() ?? createDefaultState()
+  // Check for ULID mode first (URL: ?u=ULID)
+  const urlUlid = getUlidFromUrl()
+  const initialState = urlUlid ? createDefaultState() : (getStateFromUrl() ?? createDefaultState())
+
   const state = ref<AppState>(initialState)
+
+  // ULID mode state
+  const listId = ref<string | null>(urlUlid)
+  const listVersion = ref<number>(0)
 
   const currency = computed(() => state.value.currency || DEFAULT_CURRENCY)
   const eventName = computed(() => state.value.eventName || '')
 
-  // Track if URL is too long
+  // True when state is backed by database instead of URL
+  const isUlidMode = computed(() => listId.value !== null)
+
+  // Track if URL is too long (only relevant in URL mode)
   const isUrlTooLong = computed(() => {
+    if (isUlidMode.value) return false
     if (!hasUserData(state.value)) return false
     const encoded = encodeState(state.value)
     // Account for base URL + "?data=" prefix
@@ -244,8 +263,11 @@ export function useUrlState() {
     return estimatedUrlLength > URL_LENGTH_LIMIT
   })
 
-  watch([state, isUrlTooLong], ([newState, tooLong]) => {
-    updateUrl(newState, tooLong)
+  // Only update URL in URL mode (not ULID mode)
+  watch([state, isUrlTooLong, isUlidMode], ([newState, tooLong, ulidMode]) => {
+    if (!ulidMode) {
+      updateUrl(newState, tooLong)
+    }
   }, { deep: true, immediate: true })
 
   function addPerson(): void {
@@ -324,6 +346,38 @@ export function useUrlState() {
 
   function reset(): void {
     state.value = createDefaultState()
+    listId.value = null
+    listVersion.value = 0
+    // Clear URL to base path
+    window.history.replaceState({}, '', window.location.pathname)
+  }
+
+  /**
+   * Set the entire state (used when loading from API)
+   */
+  function setState(newState: AppState): void {
+    state.value = newState
+  }
+
+  /**
+   * Enter ULID mode (used after upgrading from URL to database)
+   */
+  function setUlidMode(id: string, version: number): void {
+    listId.value = id
+    listVersion.value = version
+    // Update URL to ULID format
+    const url = new URL(window.location.href)
+    url.searchParams.delete('data')
+    url.searchParams.set('u', id)
+    let urlString = url.toString().replace(/\/\?/, '?')
+    window.history.replaceState({}, '', urlString)
+  }
+
+  /**
+   * Update the version after a successful save
+   */
+  function setListVersion(version: number): void {
+    listVersion.value = version
   }
 
   return {
@@ -331,6 +385,9 @@ export function useUrlState() {
     currency,
     eventName,
     isUrlTooLong,
+    isUlidMode,
+    listId,
+    listVersion,
     addPerson,
     removePerson,
     updatePersonName,
@@ -340,7 +397,10 @@ export function useUrlState() {
     setCurrency,
     setEventName,
     updatePersonPayments,
-    reset
+    reset,
+    setState,
+    setUlidMode,
+    setListVersion
   }
 }
 

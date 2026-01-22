@@ -1,3 +1,24 @@
 name = "grouppayback"
-compatibility_date = "2024-01-01"
-pages_build_output_dir = "./dist"
+compatibility_date = "2025-01-01"
+main = "workers/index.ts"
+
+[assets]
+directory = "./dist"
+not_found_handling = "single-page-application"
+
+# D1 Database binding
+# To create the database:
+#   wrangler d1 create grouppayback
+# Then update database_id below with the ID from the output
+[[d1_databases]]
+binding = "DB"
+database_name = "grouppayback"
+database_id = "642525e7-7cd4-42f3-982c-82d1aa6cdb25"
+
+# Production environment
+[env.production]
+# Production D1 database (same database for now, can be split later)
+[[env.production.d1_databases]]
+binding = "DB"
+database_name = "grouppayback"
+database_id = "642525e7-7cd4-42f3-982c-82d1aa6cdb25"
