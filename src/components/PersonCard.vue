@@ -8,6 +8,7 @@ const props = defineProps<{
   person: Person
   currency: string
   canRemove: boolean
+  disableAddItem?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -63,7 +64,13 @@ const totalCents = computed(() => {
 
     <button
       @click="$emit('addItem')"
-      class="mt-4 w-full py-2 px-4 border-2 border-dashed border-gray-300 rounded-lg text-gray-500 hover:border-blue-400 hover:text-blue-500 transition-colors text-sm font-medium"
+      :disabled="disableAddItem"
+      :class="[
+        'mt-4 w-full py-2 px-4 border-2 border-dashed rounded-lg text-sm font-medium transition-colors',
+        disableAddItem
+          ? 'border-gray-200 text-gray-300 cursor-not-allowed bg-gray-50'
+          : 'border-gray-300 text-gray-500 hover:border-blue-400 hover:text-blue-500'
+      ]"
     >
       + Add Item
     </button>

@@ -9,6 +9,7 @@ import SettlementList from './components/SettlementList.vue'
 const {
   state,
   currency,
+  isUrlTooLong,
   addPerson,
   removePerson,
   updatePersonName,
@@ -101,6 +102,23 @@ function confirmReset() {
       </div>
     </header>
 
+    <!-- URL Length Warning -->
+    <Transition name="slide-fade">
+      <div v-if="isUrlTooLong" class="bg-amber-50 border-b border-amber-200">
+        <div class="max-w-4xl mx-auto px-4 py-3">
+          <div class="flex items-start gap-3">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-amber-500 shrink-0 mt-0.5" viewBox="0 0 20 20" fill="currentColor">
+              <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
+            </svg>
+            <p class="text-sm text-amber-800">
+              <span class="font-medium">Too many entries.</span>
+              The URL is getting too long to share reliably. Consider combining similar items or grouping people to keep the link shareable.
+            </p>
+          </div>
+        </div>
+      </div>
+    </Transition>
+
     <main class="max-w-4xl mx-auto px-4 py-6 sm:py-8">
       <div class="grid gap-6 lg:grid-cols-2">
         <section>
@@ -132,13 +150,14 @@ function confirmReset() {
               :person="person"
               :currency="currency"
               :can-remove="state.people.length > 1"
+              :disable-add-item="isUrlTooLong"
               @update-name="name => updatePersonName(person.id, name)"
               @add-item="addLineItem(person.id)"
               @remove-item="itemId => removeLineItem(person.id, itemId)"
               @update-item="(itemId, updates) => updateLineItem(person.id, itemId, updates)"
               @remove="removePerson(person.id)"
             />
-            <AddPersonButton @click="addPerson" />
+            <AddPersonButton :disabled="isUrlTooLong" @click="addPerson" />
           </div>
         </section>
 

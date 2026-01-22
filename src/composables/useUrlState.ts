@@ -181,11 +181,23 @@ function createDefaultState(): AppState {
   }
 }
 
+// Conservative URL length limit (supports IE/Edge legacy and avoids truncation in messaging apps)
+const URL_LENGTH_LIMIT = 2000
+
 export function useUrlState() {
   const initialState = getStateFromUrl() ?? createDefaultState()
   const state = ref<AppState>(initialState)
 
   const currency = computed(() => state.value.currency || DEFAULT_CURRENCY)
+
+  // Track if URL is too long
+  const isUrlTooLong = computed(() => {
+    if (!hasUserData(state.value)) return false
+    const encoded = encodeState(state.value)
+    // Account for base URL + "?data=" prefix
+    const estimatedUrlLength = window.location.origin.length + window.location.pathname.length + 6 + encoded.length
+    return estimatedUrlLength > URL_LENGTH_LIMIT
+  })
 
   watch(state, (newState) => {
     updateUrl(newState)
@@ -260,6 +272,7 @@ export function useUrlState() {
   return {
     state,
     currency,
+    isUrlTooLong,
     addPerson,
     removePerson,
     updatePersonName,
