@@ -68,6 +68,34 @@ function fromCompact(compact: CompactState): AppState {
   }
 }
 
+// URL-safe base64 encoding (no padding, - instead of +, _ instead of /)
+// Handles Unicode by encoding to UTF-8 first
+function toBase64Url(str: string): string {
+  // Convert Unicode string to UTF-8 bytes, then to base64
+  const utf8 = encodeURIComponent(str).replace(/%([0-9A-F]{2})/g, (_, p1) =>
+    String.fromCharCode(parseInt(p1, 16))
+  )
+  return btoa(utf8)
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/, '')
+}
+
+function fromBase64Url(str: string): string {
+  // Restore standard base64 characters
+  let base64 = str.replace(/-/g, '+').replace(/_/g, '/')
+  // Add padding if needed
+  const padding = base64.length % 4
+  if (padding) {
+    base64 += '='.repeat(4 - padding)
+  }
+  // Decode base64 to UTF-8 bytes, then to Unicode string
+  const utf8 = atob(base64)
+  return decodeURIComponent(
+    utf8.split('').map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)).join('')
+  )
+}
+
 function encodeState(state: AppState): string {
   // Only include currency in URL if it's not the default
   const stateToEncode = { ...state }
@@ -77,12 +105,23 @@ function encodeState(state: AppState): string {
   // Convert to compact format for shorter URLs
   const compact = toCompact(stateToEncode)
   const json = JSON.stringify(compact)
-  return btoa(encodeURIComponent(json))
+  // Use URL-safe base64 encoding directly on JSON (no encodeURIComponent needed)
+  return toBase64Url(json)
 }
 
 function decodeState(encoded: string): AppState | null {
   try {
-    const json = decodeURIComponent(atob(encoded))
+    let json: string
+
+    // Try new URL-safe base64 format first (raw JSON → base64url)
+    try {
+      json = fromBase64Url(encoded)
+      JSON.parse(json) // Validate it's valid JSON
+    } catch {
+      // Fall back to old format (encodeURIComponent → base64)
+      json = decodeURIComponent(atob(encoded))
+    }
+
     const parsed = JSON.parse(json)
 
     // Check for old format (has 'people' key)
@@ -236,6 +275,8 @@ export function useUrlState() {
 export const _testing = {
   toCompact,
   fromCompact,
+  toBase64Url,
+  fromBase64Url,
   encodeState,
   decodeState,
 }

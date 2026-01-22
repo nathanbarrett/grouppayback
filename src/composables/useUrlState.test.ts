@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { _testing } from './useUrlState'
 import type { AppState } from '../types'
 
-const { toCompact, fromCompact, encodeState, decodeState } = _testing
+const { toCompact, fromCompact, toBase64Url, fromBase64Url, encodeState, decodeState } = _testing
 
 describe('URL State Encoding', () => {
   describe('toCompact', () => {
@@ -164,19 +164,58 @@ describe('URL State Encoding', () => {
     })
   })
 
+  describe('base64url encoding', () => {
+    it('toBase64Url produces URL-safe output', () => {
+      const input = '{"test": "hello world"}'
+      const encoded = toBase64Url(input)
+
+      // Should not contain +, /, or = (URL-unsafe characters)
+      expect(encoded).not.toMatch(/[+/=]/)
+    })
+
+    it('fromBase64Url reverses toBase64Url', () => {
+      const original = '{"p":[{"i":"test","n":"Alice","t":[]}]}'
+      const encoded = toBase64Url(original)
+      const decoded = fromBase64Url(encoded)
+
+      expect(decoded).toBe(original)
+    })
+
+    it('handles strings that would have padding', () => {
+      // Test various lengths that would require different padding amounts
+      const inputs = ['a', 'ab', 'abc', 'abcd', 'abcde']
+
+      for (const input of inputs) {
+        const encoded = toBase64Url(input)
+        const decoded = fromBase64Url(encoded)
+        expect(decoded).toBe(input)
+      }
+    })
+
+    it('handles special characters in JSON', () => {
+      const input = '{"name":"José García","item":"Café & croissant"}'
+      const encoded = toBase64Url(input)
+      const decoded = fromBase64Url(encoded)
+
+      expect(decoded).toBe(input)
+    })
+  })
+
   describe('encodeState', () => {
-    it('produces a base64-encoded string', () => {
+    it('produces a URL-safe base64 string', () => {
       const state: AppState = {
         people: [{ id: 'p1', name: 'Test', items: [] }]
       }
 
       const encoded = encodeState(state)
 
-      // Should be valid base64 (no errors when decoding)
-      expect(() => atob(encoded)).not.toThrow()
+      // Should not contain URL-unsafe characters
+      expect(encoded).not.toMatch(/[+/=]/)
+      // Should only contain alphanumeric, - and _
+      expect(encoded).toMatch(/^[A-Za-z0-9_-]+$/)
     })
 
-    it('produces shorter output than full JSON', () => {
+    it('produces shorter output than old encoding method', () => {
       const state: AppState = {
         people: [
           {
@@ -190,10 +229,10 @@ describe('URL State Encoding', () => {
       }
 
       const encoded = encodeState(state)
-      const fullJson = JSON.stringify(state)
-      const fullEncoded = btoa(encodeURIComponent(fullJson))
+      // Old method: btoa(encodeURIComponent(JSON.stringify(state)))
+      const oldEncoded = btoa(encodeURIComponent(JSON.stringify(state)))
 
-      expect(encoded.length).toBeLessThan(fullEncoded.length)
+      expect(encoded.length).toBeLessThan(oldEncoded.length)
     })
 
     it('excludes default currency ($) from encoded output', () => {
@@ -203,7 +242,7 @@ describe('URL State Encoding', () => {
       }
 
       const encoded = encodeState(state)
-      const decoded = JSON.parse(decodeURIComponent(atob(encoded)))
+      const decoded = JSON.parse(fromBase64Url(encoded))
 
       expect(decoded.c).toBeUndefined()
     })
@@ -215,7 +254,7 @@ describe('URL State Encoding', () => {
       }
 
       const encoded = encodeState(state)
-      const decoded = JSON.parse(decodeURIComponent(atob(encoded)))
+      const decoded = JSON.parse(fromBase64Url(encoded))
 
       expect(decoded.c).toBe('€')
     })
@@ -239,7 +278,7 @@ describe('URL State Encoding', () => {
       expect(decoded).toEqual(state)
     })
 
-    it('handles backward compatibility with old format (full keys)', () => {
+    it('handles backward compatibility with old format (encodeURIComponent + base64)', () => {
       const oldFormatState = {
         people: [
           {
@@ -251,11 +290,39 @@ describe('URL State Encoding', () => {
         currency: '€'
       }
 
-      // Encode in old format (without compact conversion)
+      // Encode in old format (encodeURIComponent → base64)
       const oldEncoded = btoa(encodeURIComponent(JSON.stringify(oldFormatState)))
       const decoded = decodeState(oldEncoded)
 
       expect(decoded).toEqual(oldFormatState)
+    })
+
+    it('handles backward compatibility with old compact format', () => {
+      const compactState = {
+        p: [
+          {
+            i: 'p1',
+            n: 'Alice',
+            t: [{ i: 'i1', n: 'Lunch', a: 1500 }]
+          }
+        ],
+        c: '€'
+      }
+
+      // Old compact format (encodeURIComponent → base64)
+      const oldCompactEncoded = btoa(encodeURIComponent(JSON.stringify(compactState)))
+      const decoded = decodeState(oldCompactEncoded)
+
+      expect(decoded).toEqual({
+        people: [
+          {
+            id: 'p1',
+            name: 'Alice',
+            items: [{ id: 'i1', name: 'Lunch', amountCents: 1500 }]
+          }
+        ],
+        currency: '€'
+      })
     })
 
     it('returns null for invalid base64', () => {
@@ -265,14 +332,14 @@ describe('URL State Encoding', () => {
     })
 
     it('returns null for valid base64 but invalid JSON', () => {
-      const encoded = btoa('not json at all')
+      const encoded = toBase64Url('not json at all')
       const decoded = decodeState(encoded)
 
       expect(decoded).toBeNull()
     })
 
     it('returns null for valid JSON but missing people/p array', () => {
-      const encoded = btoa(encodeURIComponent(JSON.stringify({ foo: 'bar' })))
+      const encoded = toBase64Url(JSON.stringify({ foo: 'bar' }))
       const decoded = decodeState(encoded)
 
       expect(decoded).toBeNull()
@@ -393,7 +460,7 @@ describe('URL State Encoding', () => {
   })
 
   describe('URL size reduction', () => {
-    it('achieves significant size reduction for typical data', () => {
+    it('achieves significant size reduction compared to old encoding', () => {
       const state: AppState = {
         people: [
           {
@@ -418,19 +485,36 @@ describe('URL State Encoding', () => {
         currency: '€'
       }
 
-      // Old format (full keys)
+      // Old format: full keys + encodeURIComponent + base64
       const oldFormat = JSON.stringify(state)
       const oldEncoded = btoa(encodeURIComponent(oldFormat))
 
-      // New format (compact keys)
+      // New format: compact keys + URL-safe base64
       const newEncoded = encodeState(state)
 
       const reduction = ((oldEncoded.length - newEncoded.length) / oldEncoded.length) * 100
 
-      // Should achieve at least 10% reduction (actual is ~15%)
-      expect(reduction).toBeGreaterThan(10)
-      // Verify new encoding is shorter
-      expect(newEncoded.length).toBeLessThan(oldEncoded.length)
+      // Should achieve at least 50% reduction (actual is ~52%)
+      expect(reduction).toBeGreaterThan(50)
+      // Verify new encoding is much shorter
+      expect(newEncoded.length).toBeLessThan(oldEncoded.length / 2)
+    })
+
+    it('produces URL-safe output that needs no additional encoding', () => {
+      const state: AppState = {
+        people: [
+          {
+            id: 'p1',
+            name: 'Test User',
+            items: [{ id: 'i1', name: 'Item', amountCents: 1000 }]
+          }
+        ]
+      }
+
+      const encoded = encodeState(state)
+
+      // encodeURIComponent should not change it (already URL-safe)
+      expect(encodeURIComponent(encoded)).toBe(encoded)
     })
   })
 })
