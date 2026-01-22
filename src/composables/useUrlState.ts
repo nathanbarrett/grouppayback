@@ -1,6 +1,24 @@
 import { ref, watch, computed } from 'vue'
 import type { AppState } from '../types'
 
+// Compact types for URL encoding (reduces URL length by ~40%)
+interface CompactLineItem {
+  i: string      // id
+  n: string      // name
+  a: number      // amountCents
+}
+
+interface CompactPerson {
+  i: string            // id
+  n: string            // name
+  t: CompactLineItem[] // items (using 't' since 'i' is for id)
+}
+
+interface CompactState {
+  p: CompactPerson[]   // people
+  c?: string           // currency
+}
+
 export const CURRENCIES = [
   { symbol: '$', name: 'Dollar' },
   { symbol: '€', name: 'Euro' },
@@ -20,13 +38,45 @@ function generateId(): string {
   return Math.random().toString(36).substring(2, 9)
 }
 
+function toCompact(state: AppState): CompactState {
+  return {
+    p: state.people.map(person => ({
+      i: person.id,
+      n: person.name,
+      t: person.items.map(item => ({
+        i: item.id,
+        n: item.name,
+        a: item.amountCents
+      }))
+    })),
+    ...(state.currency && { c: state.currency })
+  }
+}
+
+function fromCompact(compact: CompactState): AppState {
+  return {
+    people: compact.p.map(person => ({
+      id: person.i,
+      name: person.n,
+      items: person.t.map(item => ({
+        id: item.i,
+        name: item.n,
+        amountCents: item.a
+      }))
+    })),
+    ...(compact.c && { currency: compact.c })
+  }
+}
+
 function encodeState(state: AppState): string {
   // Only include currency in URL if it's not the default
   const stateToEncode = { ...state }
   if (!stateToEncode.currency || stateToEncode.currency === DEFAULT_CURRENCY) {
     delete stateToEncode.currency
   }
-  const json = JSON.stringify(stateToEncode)
+  // Convert to compact format for shorter URLs
+  const compact = toCompact(stateToEncode)
+  const json = JSON.stringify(compact)
   return btoa(encodeURIComponent(json))
 }
 
@@ -34,9 +84,17 @@ function decodeState(encoded: string): AppState | null {
   try {
     const json = decodeURIComponent(atob(encoded))
     const parsed = JSON.parse(json)
+
+    // Check for old format (has 'people' key)
     if (parsed && Array.isArray(parsed.people)) {
       return parsed as AppState
     }
+
+    // Check for compact format (has 'p' key)
+    if (parsed && Array.isArray(parsed.p)) {
+      return fromCompact(parsed as CompactState)
+    }
+
     return null
   } catch {
     return null
@@ -172,4 +230,12 @@ export function useUrlState() {
     setCurrency,
     reset
   }
+}
+
+// Export internal functions for testing
+export const _testing = {
+  toCompact,
+  fromCompact,
+  encodeState,
+  decodeState,
 }
