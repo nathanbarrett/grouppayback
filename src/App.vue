@@ -1,14 +1,17 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { useUrlState, CURRENCIES } from './composables/useUrlState'
 import { useSettlements } from './composables/useSettlements'
 import PersonCard from './components/PersonCard.vue'
 import AddPersonButton from './components/AddPersonButton.vue'
 import SettlementList from './components/SettlementList.vue'
+import PaymentMethodsModal from './components/PaymentMethodsModal.vue'
+import type { PaymentMethods } from './types'
 
 const {
   state,
   currency,
+  eventName,
   isUrlTooLong,
   addPerson,
   removePerson,
@@ -17,6 +20,8 @@ const {
   removeLineItem,
   updateLineItem,
   setCurrency,
+  setEventName,
+  updatePersonPayments,
   reset
 } = useUrlState()
 
@@ -25,6 +30,12 @@ const { settlements, isCalculating, hasEnoughData } = useSettlements(state)
 const copied = ref(false)
 const showResetModal = ref(false)
 const showCopyHintModal = ref(false)
+const paymentModalPersonId = ref<string | null>(null)
+
+const paymentModalPerson = computed(() => {
+  if (!paymentModalPersonId.value) return null
+  return state.value.people.find(p => p.id === paymentModalPersonId.value) ?? null
+})
 
 const COPY_HINT_SEEN_KEY = 'grouppayback_copy_hint_seen'
 
@@ -65,6 +76,21 @@ function dismissCopyHint() {
 function confirmReset() {
   reset()
   showResetModal.value = false
+}
+
+function openPaymentModal(personId: string) {
+  paymentModalPersonId.value = personId
+}
+
+function closePaymentModal() {
+  paymentModalPersonId.value = null
+}
+
+function savePaymentMethods(payments: PaymentMethods) {
+  if (paymentModalPersonId.value) {
+    updatePersonPayments(paymentModalPersonId.value, payments)
+  }
+  closePaymentModal()
 }
 </script>
 
@@ -120,6 +146,17 @@ function confirmReset() {
     </Transition>
 
     <main class="max-w-4xl mx-auto px-4 py-6 sm:py-8">
+      <!-- Event Name Input -->
+      <div class="mb-6">
+        <input
+          type="text"
+          :value="eventName"
+          @input="setEventName(($event.target as HTMLInputElement).value)"
+          placeholder="Event name (optional)"
+          class="text-xl sm:text-2xl font-semibold text-gray-800 bg-transparent border-b-2 border-transparent focus:border-blue-500 focus:outline-none px-1 py-1 w-full max-w-md"
+        />
+      </div>
+
       <div class="grid gap-6 lg:grid-cols-2">
         <section>
           <div class="flex items-center justify-between mb-4">
@@ -155,6 +192,7 @@ function confirmReset() {
               @remove-item="itemId => removeLineItem(person.id, itemId)"
               @update-item="(itemId, updates) => updateLineItem(person.id, itemId, updates)"
               @remove="removePerson(person.id)"
+              @open-payment-modal="openPaymentModal(person.id)"
             />
             <AddPersonButton @click="addPerson" />
           </div>
@@ -167,6 +205,7 @@ function confirmReset() {
               :settlements="settlements"
               :is-calculating="isCalculating"
               :currency="currency"
+              :people="state.people"
             />
           </Transition>
         </section>
@@ -255,6 +294,15 @@ function confirmReset() {
         </div>
       </div>
     </Transition>
+
+    <!-- Payment Methods Modal -->
+    <PaymentMethodsModal
+      v-if="paymentModalPerson"
+      :person="paymentModalPerson"
+      :show="!!paymentModalPerson"
+      @save="savePaymentMethods"
+      @close="closePaymentModal"
+    />
   </div>
 </template>
 

@@ -1,12 +1,66 @@
 <script setup lang="ts">
-import type { Settlement } from '../types'
+import { ref, computed } from 'vue'
+import type { Settlement, Person } from '../types'
 import { formatCents } from '../composables/useSettlements'
+import { hasAnyPaymentMethod } from '../composables/usePaymentMethods'
+import PaymentPopover from './PaymentPopover.vue'
 
-defineProps<{
+const props = defineProps<{
   settlements: Settlement[]
   isCalculating: boolean
   currency: string
+  people: Person[]
 }>()
+
+const popoverPerson = ref<Person | null>(null)
+const popoverAmount = ref<number>(0)
+const popoverPosition = ref<{ x: number; y: number }>({ x: 0, y: 0 })
+
+const isTouchDevice = computed(() => {
+  return 'ontouchstart' in window || navigator.maxTouchPoints > 0
+})
+
+// Create a reactive map of person names to their payment status
+const payablePersonNames = computed(() => {
+  const payable = new Set<string>()
+  for (const person of props.people) {
+    if (hasAnyPaymentMethod(person.payments)) {
+      payable.add(person.name)
+    }
+  }
+  return payable
+})
+
+const hasAnyPayablePerson = computed(() => {
+  return props.settlements.some(s => payablePersonNames.value.has(s.to))
+})
+
+function getPersonByName(name: string): Person | undefined {
+  return props.people.find(p => p.name === name)
+}
+
+function canPayPerson(name: string): boolean {
+  return payablePersonNames.value.has(name)
+}
+
+function handleNameClick(event: MouseEvent, settlement: Settlement): void {
+  const person = getPersonByName(settlement.to)
+  if (!person || !hasAnyPaymentMethod(person.payments)) return
+
+  const target = event.target as HTMLElement
+  const rect = target.getBoundingClientRect()
+
+  popoverPerson.value = person
+  popoverAmount.value = settlement.amountCents
+  popoverPosition.value = {
+    x: rect.left + rect.width / 2,
+    y: rect.bottom + 8
+  }
+}
+
+function closePopover(): void {
+  popoverPerson.value = null
+}
 </script>
 
 <template>
@@ -44,7 +98,14 @@ defineProps<{
             <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-gray-400" viewBox="0 0 20 20" fill="currentColor">
               <path fill-rule="evenodd" d="M12.293 5.293a1 1 0 011.414 0l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414-1.414L14.586 11H3a1 1 0 110-2h11.586l-2.293-2.293a1 1 0 010-1.414z" clip-rule="evenodd" />
             </svg>
-            <span class="font-medium text-gray-800">{{ settlement.to }}</span>
+            <button
+              v-if="canPayPerson(settlement.to)"
+              @click="handleNameClick($event, settlement)"
+              class="font-medium text-blue-600 hover:text-blue-800 underline underline-offset-2 cursor-pointer transition-colors"
+            >
+              {{ settlement.to }}
+            </button>
+            <span v-else class="font-medium text-gray-800">{{ settlement.to }}</span>
           </div>
           <span class="font-bold text-blue-600 text-lg">{{ currency }}{{ formatCents(settlement.amountCents) }}</span>
         </li>
@@ -56,6 +117,19 @@ defineProps<{
       Each person's balance is calculated by subtracting their fair share from what they paid.
       Payments are then matched to settle all balances with the fewest transactions.
     </p>
+
+    <p v-if="hasAnyPayablePerson && !isCalculating" class="mt-2 text-xs text-blue-600 font-medium">
+      {{ isTouchDevice ? 'Touch' : 'Click' }} on a name to pay them directly.
+    </p>
+
+    <PaymentPopover
+      v-if="popoverPerson"
+      :person="popoverPerson"
+      :amount-cents="popoverAmount"
+      :currency="currency"
+      :position="popoverPosition"
+      @close="closePopover"
+    />
   </div>
 </template>
 

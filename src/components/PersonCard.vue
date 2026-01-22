@@ -3,6 +3,7 @@ import { computed } from 'vue'
 import type { Person } from '../types'
 import LineItemInput from './LineItemInput.vue'
 import { formatCents } from '../composables/useSettlements'
+import { hasAnyPaymentMethod } from '../composables/usePaymentMethods'
 
 const props = defineProps<{
   person: Person
@@ -17,7 +18,10 @@ const emit = defineEmits<{
   removeItem: [itemId: string]
   updateItem: [itemId: string, updates: { name?: string; amountCents?: number }]
   remove: []
+  openPaymentModal: []
 }>()
+
+const hasPayments = computed(() => hasAnyPaymentMethod(props.person.payments))
 
 const totalCents = computed(() => {
   return props.person.items.reduce((sum, item) => sum + item.amountCents, 0)
@@ -27,13 +31,30 @@ const totalCents = computed(() => {
 <template>
   <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4 sm:p-6">
     <div class="flex items-center justify-between mb-4">
-      <input
-        type="text"
-        :value="person.name"
-        @input="$emit('updateName', ($event.target as HTMLInputElement).value)"
-        placeholder="Person's name"
-        class="text-lg font-semibold bg-transparent border-b-2 border-transparent focus:border-blue-500 focus:outline-none px-1 py-1 w-full max-w-[200px]"
-      />
+      <div class="flex items-center gap-1">
+        <input
+          type="text"
+          :value="person.name"
+          @input="$emit('updateName', ($event.target as HTMLInputElement).value)"
+          placeholder="Person's name"
+          class="text-lg font-semibold bg-transparent border-b-2 border-transparent focus:border-blue-500 focus:outline-none px-1 py-1 w-full max-w-[180px]"
+        />
+        <button
+          @click="$emit('openPaymentModal')"
+          :class="[
+            'p-1.5 transition-colors rounded-md',
+            hasPayments
+              ? 'text-green-500 hover:text-green-600 hover:bg-green-50'
+              : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100'
+          ]"
+          :title="hasPayments ? 'Edit payment methods' : 'Add payment methods'"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+            <path d="M4 4a2 2 0 00-2 2v1h16V6a2 2 0 00-2-2H4z" />
+            <path fill-rule="evenodd" d="M18 9H2v5a2 2 0 002 2h12a2 2 0 002-2V9zM4 13a1 1 0 011-1h1a1 1 0 110 2H5a1 1 0 01-1-1zm5-1a1 1 0 100 2h1a1 1 0 100-2H9z" clip-rule="evenodd" />
+          </svg>
+        </button>
+      </div>
       <div class="flex items-center gap-2">
         <span v-if="totalCents > 0" class="text-sm font-medium text-gray-600">
           Total: {{ currency }}{{ formatCents(totalCents) }}

@@ -1,5 +1,5 @@
 import { ref, watch, computed } from 'vue'
-import type { AppState } from '../types'
+import type { AppState, PaymentMethods } from '../types'
 
 // Compact types for URL encoding (reduces URL length by ~40%)
 interface CompactLineItem {
@@ -8,15 +8,25 @@ interface CompactLineItem {
   a: number      // amountCents
 }
 
+interface CompactPaymentMethods {
+  v?: string  // venmo
+  z?: string  // zelle
+  p?: string  // paypal
+  a?: string  // cashapp (a for "app")
+  o?: string  // other
+}
+
 interface CompactPerson {
   i: string            // id
   n: string            // name
   t: CompactLineItem[] // items (using 't' since 'i' is for id)
+  m?: CompactPaymentMethods  // payment methods - only if person has any
 }
 
 interface CompactState {
   p: CompactPerson[]   // people
   c?: string           // currency
+  e?: string           // eventName
 }
 
 export const CURRENCIES = [
@@ -38,33 +48,66 @@ function generateId(): string {
   return Math.random().toString(36).substring(2, 9)
 }
 
+function toCompactPayments(payments?: PaymentMethods): CompactPaymentMethods | undefined {
+  if (!payments) return undefined
+  const compact: CompactPaymentMethods = {}
+  if (payments.venmo) compact.v = payments.venmo
+  if (payments.zelle) compact.z = payments.zelle
+  if (payments.paypal) compact.p = payments.paypal
+  if (payments.cashapp) compact.a = payments.cashapp
+  if (payments.other) compact.o = payments.other
+  return Object.keys(compact).length > 0 ? compact : undefined
+}
+
+function fromCompactPayments(compact?: CompactPaymentMethods): PaymentMethods | undefined {
+  if (!compact) return undefined
+  const payments: PaymentMethods = {}
+  if (compact.v) payments.venmo = compact.v
+  if (compact.z) payments.zelle = compact.z
+  if (compact.p) payments.paypal = compact.p
+  if (compact.a) payments.cashapp = compact.a
+  if (compact.o) payments.other = compact.o
+  return Object.keys(payments).length > 0 ? payments : undefined
+}
+
 function toCompact(state: AppState): CompactState {
   return {
-    p: state.people.map(person => ({
-      i: person.id,
-      n: person.name,
-      t: person.items.map(item => ({
-        i: item.id,
-        n: item.name,
-        a: item.amountCents
-      }))
-    })),
-    ...(state.currency && { c: state.currency })
+    p: state.people.map(person => {
+      const compactPerson: CompactPerson = {
+        i: person.id,
+        n: person.name,
+        t: person.items.map(item => ({
+          i: item.id,
+          n: item.name,
+          a: item.amountCents
+        }))
+      }
+      const compactPayments = toCompactPayments(person.payments)
+      if (compactPayments) compactPerson.m = compactPayments
+      return compactPerson
+    }),
+    ...(state.currency && { c: state.currency }),
+    ...(state.eventName && { e: state.eventName })
   }
 }
 
 function fromCompact(compact: CompactState): AppState {
   return {
-    people: compact.p.map(person => ({
-      id: person.i,
-      name: person.n,
-      items: person.t.map(item => ({
-        id: item.i,
-        name: item.n,
-        amountCents: item.a
-      }))
-    })),
-    ...(compact.c && { currency: compact.c })
+    people: compact.p.map(person => {
+      const payments = fromCompactPayments(person.m)
+      return {
+        id: person.i,
+        name: person.n,
+        items: person.t.map(item => ({
+          id: item.i,
+          name: item.n,
+          amountCents: item.a
+        })),
+        ...(payments && { payments })
+      }
+    }),
+    ...(compact.c && { currency: compact.c }),
+    ...(compact.e && { eventName: compact.e })
   }
 }
 
@@ -150,6 +193,7 @@ function getStateFromUrl(): AppState | null {
 }
 
 function hasUserData(state: AppState): boolean {
+  if (state.eventName && state.eventName.trim() !== '') return true
   return state.people.some(person =>
     person.name.trim() !== '' ||
     person.items.some(item => item.name.trim() !== '' || item.amountCents > 0)
@@ -189,6 +233,7 @@ export function useUrlState() {
   const state = ref<AppState>(initialState)
 
   const currency = computed(() => state.value.currency || DEFAULT_CURRENCY)
+  const eventName = computed(() => state.value.eventName || '')
 
   // Track if URL is too long
   const isUrlTooLong = computed(() => {
@@ -265,6 +310,18 @@ export function useUrlState() {
     state.value.currency = symbol === DEFAULT_CURRENCY ? undefined : symbol
   }
 
+  function setEventName(name: string): void {
+    state.value.eventName = name.trim() === '' ? undefined : name
+  }
+
+  function updatePersonPayments(personId: string, payments: PaymentMethods): void {
+    const person = state.value.people.find(p => p.id === personId)
+    if (person) {
+      const hasAnyPayment = Object.values(payments).some(v => v && v.trim() !== '')
+      person.payments = hasAnyPayment ? payments : undefined
+    }
+  }
+
   function reset(): void {
     state.value = createDefaultState()
   }
@@ -272,6 +329,7 @@ export function useUrlState() {
   return {
     state,
     currency,
+    eventName,
     isUrlTooLong,
     addPerson,
     removePerson,
@@ -280,6 +338,8 @@ export function useUrlState() {
     removeLineItem,
     updateLineItem,
     setCurrency,
+    setEventName,
+    updatePersonPayments,
     reset
   }
 }
