@@ -24,8 +24,8 @@ migrations_dir = "migrations"
 name = "grouppayback"
 
 [env.production.vars]
-# Remains disabled until grouppayback.com is onboarded and live mail is approved.
-EMAIL_MODE = "mock"
+# Production release approved; root sender onboarded via Wrangler Email Sending.
+EMAIL_MODE = "live"
 ALLOWED_ORIGINS = ""
 
 [[env.production.send_email]]
