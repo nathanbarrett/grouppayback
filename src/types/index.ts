@@ -45,7 +45,19 @@ export interface ApiListResponse {
   updatedAt: number
 }
 
+export interface ApiCreateListRequest {
+  idempotencyKey: string
+  email: string
+  title: string
+  data: AppState
+}
+
+export interface ApiCreateListResponse extends ApiListResponse {
+  email: { status: 'sent' | 'failed' | 'pending' | 'mocked' }
+}
+
 export interface ApiErrorResponse {
+  retryAfterSeconds?: number
   error: string
   code?: string
   expectedVersion?: number

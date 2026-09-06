@@ -16,7 +16,7 @@ const emit = defineEmits<{
       'inline-flex items-center justify-center gap-1.5 font-medium rounded-lg transition-colors',
       variant === 'secondary'
         ? 'bg-gray-100 hover:bg-gray-200 text-gray-700'
-        : 'bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 text-white',
+        : 'bg-blue-600 hover:bg-blue-700 text-white',
       size === 'sm' ? 'px-3 py-1.5 text-sm' : 'px-4 py-2'
     ]"
   >
@@ -30,8 +30,8 @@ const emit = defineEmits<{
       stroke-linecap="round"
       stroke-linejoin="round"
     >
-      <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
+      <path d="M7 18a5 5 0 01-1-9.9A7 7 0 0119 8a5 5 0 010 10H7z" />
     </svg>
-    <span>Upgrade</span>
+    <span>Save event</span>
   </button>
 </template>

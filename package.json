@@ -11,7 +11,7 @@
     "test:run": "vitest run",
     "typecheck:app": "vue-tsc --noEmit -p tsconfig.app.json",
     "typecheck:workers": "tsc --noEmit -p tsconfig.workers.json",
-    "deploy": "npm run build && wrangler deploy",
+    "deploy": "node -e \"console.error('Default deploy disabled: use npm run deploy:prod only after release approval.'); process.exit(1)\"",
     "deploy:prod": "npm run build && wrangler deploy --env production"
   },
   "dependencies": {
@@ -27,6 +27,7 @@
     "@vue/tsconfig": "^0.8.1",
     "autoprefixer": "^10.4.23",
     "jsdom": "^27.4.0",
+    "miniflare": "4.20260120.0",
     "postcss": "^8.5.6",
     "tailwindcss": "^4.1.18",
     "typescript": "~5.9.3",

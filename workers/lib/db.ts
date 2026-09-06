@@ -106,7 +106,7 @@ export async function getList(
   id: string
 ): Promise<SettlementList | null> {
   const row = await db
-    .prepare('SELECT * FROM settlement_lists WHERE id = ?')
+    .prepare('SELECT id, data, version, created_at, updated_at FROM settlement_lists WHERE id = ?')
     .bind(id)
     .first<SettlementListRow>()
 

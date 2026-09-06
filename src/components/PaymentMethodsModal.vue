@@ -80,7 +80,7 @@ function handleCancel(): void {
             </label>
             <input
               :id="`payment-${provider.key}`"
-              v-model="formData[provider.key]"
+              v-model="formData[provider.key]" maxlength="200"
               type="text"
               :placeholder="provider.placeholder"
               @blur="validateField(provider.key)"

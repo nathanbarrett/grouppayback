@@ -34,7 +34,7 @@ const totalCents = computed(() => {
       <div class="flex items-center gap-1">
         <input
           type="text"
-          :value="person.name"
+          :value="person.name" maxlength="200"
           @input="$emit('updateName', ($event.target as HTMLInputElement).value)"
           placeholder="Person's name"
           class="text-lg font-semibold bg-transparent border-b-2 border-transparent focus:border-blue-500 focus:outline-none px-1 py-1 w-full max-w-[180px]"

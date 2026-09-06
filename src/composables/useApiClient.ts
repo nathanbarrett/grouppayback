@@ -1,5 +1,5 @@
 import { ref, watch, type Ref } from 'vue'
-import type { AppState, ApiListResponse, ApiErrorResponse } from '../types'
+import type { AppState, ApiListResponse, ApiErrorResponse, ApiCreateListRequest, ApiCreateListResponse } from '../types'
 
 const API_BASE = '/api'
 
@@ -18,19 +18,18 @@ export function useApiClient() {
   /**
    * Create a new list in the database
    */
-  async function createList(data: AppState): Promise<ApiListResponse> {
+  async function createList(request: ApiCreateListRequest): Promise<ApiCreateListResponse> {
     const response = await fetch(`${API_BASE}/lists`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ data }),
+      body: JSON.stringify(request),
     })
-
     if (!response.ok) {
-      const error = (await response.json()) as ApiErrorResponse
-      throw new Error(error.error || 'Failed to create list')
+      const error = await response.json().catch(() => ({})) as Partial<ApiErrorResponse>
+      const seconds = Number(response.headers.get('Retry-After') || error.retryAfterSeconds || 300)
+      throw Object.assign(new Error(error.error || 'Failed to save event'), { status: response.status, code: error.code, retryAfterSeconds: Number.isFinite(seconds) ? Math.max(1, seconds) : 300 })
     }
-
-    return (await response.json()) as ApiListResponse
+    return (await response.json()) as ApiCreateListResponse
   }
 
   /**
@@ -99,66 +98,50 @@ export function useApiClient() {
     listVersion: Ref<number>,
     onVersionUpdate: (version: number) => void
   ) {
-    let debounceTimer: ReturnType<typeof setTimeout> | null = null
-    let pendingSave = false
+    let timer: ReturnType<typeof setTimeout> | null = null
+    let inFlight: Promise<void> | null = null
+    let dirty = false
+    let stopped = false
 
-    async function performSave() {
+    function saveNow(): Promise<void> {
+      if (timer) { clearTimeout(timer); timer = null }
+      if (stopped || !listId.value || listVersion.value === 0) return Promise.resolve()
+      dirty = true
+      if (inFlight) return inFlight
+      inFlight = (async () => {
+        isSaving.value = true
+        saveError.value = null
+        try {
+          while (dirty && !stopped && listId.value && listVersion.value > 0) {
+            dirty = false
+            const id = listId.value
+            const result = await updateList(id, JSON.parse(JSON.stringify(state.value)), listVersion.value)
+            if (stopped || listId.value !== id) break
+            onVersionUpdate(result.version)
+          }
+        } catch (err) {
+          if (!stopped) saveError.value = err instanceof VersionConflictError
+            ? 'Someone else edited this list. Please refresh.'
+            : err instanceof Error ? err.message : 'Failed to save'
+        } finally {
+          isSaving.value = false
+          inFlight = null
+        }
+      })()
+      return inFlight
+    }
+    const stopWatch = watch(state, () => {
       if (!listId.value || listVersion.value === 0) return
-
-      isSaving.value = true
-      saveError.value = null
-
-      try {
-        const result = await updateList(
-          listId.value,
-          state.value,
-          listVersion.value
-        )
-        onVersionUpdate(result.version)
-      } catch (err) {
-        if (err instanceof VersionConflictError) {
-          saveError.value = 'Someone else edited this list. Please refresh.'
-        } else {
-          saveError.value = err instanceof Error ? err.message : 'Failed to save'
-        }
-      } finally {
-        isSaving.value = false
-      }
-    }
-
-    function debouncedSave() {
-      if (debounceTimer) {
-        clearTimeout(debounceTimer)
-      }
-
-      pendingSave = true
-      debounceTimer = setTimeout(async () => {
-        if (pendingSave) {
-          pendingSave = false
-          await performSave()
-        }
-      }, SAVE_DEBOUNCE_MS)
-    }
-
-    // Watch for state changes and trigger debounced save
-    const stopWatch = watch(
-      state,
-      () => {
-        // Only auto-save when in ULID mode with valid version
-        if (listId.value && listVersion.value > 0) {
-          debouncedSave()
-        }
-      },
-      { deep: true }
-    )
-
-    // Return cleanup function
-    return () => {
+      if (inFlight) { dirty = true; return }
+      if (timer) clearTimeout(timer)
+      timer = setTimeout(saveNow, SAVE_DEBOUNCE_MS)
+    }, { deep: true, flush: 'sync' })
+    function stop() {
+      stopped = true
       stopWatch()
-      if (debounceTimer) {
-        clearTimeout(debounceTimer)
-      }
+      if (timer) clearTimeout(timer)
     }
+    return { stop, saveNow }
   }
 
   return {
