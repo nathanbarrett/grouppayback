@@ -26,7 +26,8 @@ name = "grouppayback"
 [env.production.vars]
 # Production release approved; root sender onboarded via Wrangler Email Sending.
 EMAIL_MODE = "live"
-ALLOWED_ORIGINS = ""
+# Exact existing serving hostname verified in Wrangler deploy output and HTTPS.
+ALLOWED_ORIGINS = "https://grouppayback.nathan-barrett.workers.dev"
 
 [[env.production.send_email]]
 name = "EMAIL"

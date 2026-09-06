@@ -1,5 +1,7 @@
 # Save-event email preflight
 
+> Production release approved on 2026-09-06, superseding the historical gates below. Root-domain Email Sending is enabled for `no-reply@grouppayback.com`; SPF, DKIM, DMARC and bounce MX resolve. Production uses `EMAIL_MODE = "live"`; local/default stays mock. Migrations 0000–0002 are applied remotely. The existing apex custom domain and exact `grouppayback.nathan-barrett.workers.dev` serving hostname were verified. No live test email was sent: recipient consent and inbox delivery verification remain outstanding.
+
 ## Wiring and safe defaults
 
 - Default/local config has `EMAIL_MODE = "mock"` and **no** email binding. Persistence succeeds, but email truthfully reports `failed` and offers the copy-link fallback; no simulated delivery is reported as sent.

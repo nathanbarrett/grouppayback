@@ -1,5 +1,7 @@
 # GroupPayback
 
+> Production release approved on 2026-09-06, superseding the historical gates below. Root-domain Email Sending is enabled for `no-reply@grouppayback.com`; SPF, DKIM, DMARC and bounce MX resolve. Production uses `EMAIL_MODE = "live"`; local/default stays mock. Migrations 0000–0002 are applied remotely. The existing apex custom domain and exact `grouppayback.nathan-barrett.workers.dev` serving hostname were verified. No live test email was sent: recipient consent and inbox delivery verification remain outstanding.
+
 A bill-splitting app with no accounts. Start with a URL-backed event, then optionally save a shared cloud event. Anyone holding either share link can view and edit its contents; share only with people you trust.
 
 ## Architecture and privacy
