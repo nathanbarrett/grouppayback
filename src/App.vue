@@ -9,7 +9,8 @@ import AddPersonButton from './components/AddPersonButton.vue'
 import SettlementList from './components/SettlementList.vue'
 import PaymentMethodsModal from './components/PaymentMethodsModal.vue'
 import UpgradeButton from './components/UpgradeButton.vue'
-import UpgradeModal from './components/UpgradeModal.vue'
+import SaveEventModal from './components/SaveEventModal.vue'
+import { useSaveEvent } from './composables/useSaveEvent'
 import SavedListsDropdown from './components/SavedListsDropdown.vue'
 import type { PaymentMethods } from './types'
 
@@ -60,9 +61,8 @@ const {
 const copied = ref(false)
 const showResetModal = ref(false)
 const showCopyHintModal = ref(false)
-const showUpgradeModal = ref(false)
-const isUpgrading = ref(false)
-const upgradeError = ref<string | null>(null)
+const saveFlow = useSaveEvent({ state, listId, createList, setUlidMode, setEventName, addSavedList, startAutoSave: setupAutoSave })
+const { visible: showSaveModal, busy: saveBusy, error: saveEventError, savedId, emailStatus, retryAt, locked, attempts } = saveFlow
 const paymentModalPersonId = ref<string | null>(null)
 const initialLoadComplete = ref(!listId.value) // Start as complete if not in ULID mode
 
@@ -79,13 +79,15 @@ let stopAutoSave: (() => void) | null = null
 // Set up auto-save when in ULID mode
 function setupAutoSave() {
   if (stopAutoSave) stopAutoSave()
-  stopAutoSave = createAutoSaver(state, listId, listVersion, (newVersion) => {
+  const saver = createAutoSaver(state, listId, listVersion, (newVersion) => {
     setListVersion(newVersion)
     // Update saved list name if event name changed
     if (listId.value && eventName.value) {
       updateSavedListName(listId.value, eventName.value)
     }
   })
+  stopAutoSave = saver.stop
+  return saver
 }
 
 // Load list from API if in ULID mode
@@ -159,6 +161,9 @@ function dismissCopyHint() {
 }
 
 function confirmReset() {
+  saveFlow.reset()
+  stopAutoSave?.()
+  stopAutoSave = null
   reset()
   showResetModal.value = false
 }
@@ -178,35 +183,8 @@ function savePaymentMethods(payments: PaymentMethods) {
   closePaymentModal()
 }
 
-// Upgrade flow
 function openUpgradeModal() {
-  upgradeError.value = null
-  showUpgradeModal.value = true
-}
-
-async function handleUpgrade() {
-  isUpgrading.value = true
-  upgradeError.value = null
-
-  try {
-    const result = await createList(state.value)
-
-    // Save to local storage
-    addSavedList(result.id, eventName.value || 'Untitled')
-
-    // Switch to ULID mode
-    setUlidMode(result.id, result.version)
-
-    // Set up auto-save
-    setupAutoSave()
-
-    // Close modal
-    showUpgradeModal.value = false
-  } catch (err) {
-    upgradeError.value = err instanceof Error ? err.message : 'Failed to upgrade. Please try again.'
-  } finally {
-    isUpgrading.value = false
-  }
+  saveFlow.open()
 }
 
 // Handle selecting a saved list
@@ -263,13 +241,13 @@ const basePath = window.location.pathname
 
     <header class="bg-white shadow-sm border-b border-gray-200">
       <div class="max-w-4xl mx-auto px-4 py-4 sm:py-6">
-        <div class="flex items-start justify-between gap-4">
+        <div class="flex flex-col sm:flex-row items-start justify-between gap-4">
           <div>
             <h1 class="text-2xl sm:text-3xl font-bold text-gray-900">GroupPayback</h1>
             <p class="mt-1 text-sm text-gray-500">Split bills simply</p>
           </div>
-          <div class="flex flex-col items-end gap-2">
-            <div class="flex items-center gap-2">
+          <div class="flex min-w-0 w-full sm:w-auto flex-col items-end gap-2">
+            <div class="flex max-w-full flex-wrap justify-end items-center gap-2">
               <!-- Saved Lists Dropdown -->
               <SavedListsDropdown
                 v-if="hasSavedLists"
@@ -278,6 +256,8 @@ const basePath = window.location.pathname
                 @select="handleSelectList"
                 @remove="handleRemoveList"
               />
+
+              <UpgradeButton v-if="!isUlidMode" variant="secondary" size="sm" @click="openUpgradeModal" />
 
               <!-- Copy Link Button -->
               <button
@@ -349,7 +329,7 @@ const basePath = window.location.pathname
               </svg>
               <p class="text-sm text-amber-800">
                 <span class="font-medium">List too large to share via URL.</span>
-                <span class="hidden sm:inline"> Upgrade to save in the cloud and get a short, shareable link.</span>
+                <span class="hidden sm:inline"> Save your event in the cloud and get a short, shareable link.</span>
               </p>
             </div>
             <UpgradeButton @click="openUpgradeModal" size="sm" />
@@ -363,7 +343,7 @@ const basePath = window.location.pathname
       <div class="mb-6">
         <input
           type="text"
-          :value="eventName"
+          :value="eventName" maxlength="100"
           @input="setEventName(($event.target as HTMLInputElement).value)"
           placeholder="Event name (optional)"
           class="text-xl sm:text-2xl font-semibold text-gray-800 bg-transparent border-b-2 border-transparent focus:border-blue-500 focus:outline-none px-1 py-1 w-full max-w-md"
@@ -527,12 +507,11 @@ const basePath = window.location.pathname
     />
 
     <!-- Upgrade Modal -->
-    <UpgradeModal
-      :show="showUpgradeModal"
-      :is-loading="isUpgrading"
-      :error="upgradeError"
-      @close="showUpgradeModal = false"
-      @upgrade="handleUpgrade"
+    <SaveEventModal
+      :show="showSaveModal" :event-name="eventName" :busy="saveBusy"
+      :error="saveEventError" :saved-id="savedId" :email-status="emailStatus"
+      :retry-at="retryAt" :locked="locked" :attempts="attempts"
+      @close="saveFlow.close" @save="saveFlow.submit"
     />
   </div>
 </template>

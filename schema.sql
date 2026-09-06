@@ -1,17 +1,21 @@
--- GroupPayback D1 Database Schema
--- Stores settlement lists that have been upgraded from URL storage
-
 CREATE TABLE IF NOT EXISTS settlement_lists (
-  id TEXT PRIMARY KEY,              -- ULID (26 chars, sortable by creation time)
-  data TEXT NOT NULL,               -- JSON blob containing full AppState
-  version INTEGER DEFAULT 1,        -- For optimistic locking/conflict resolution
-  created_at INTEGER NOT NULL,      -- Unix timestamp in milliseconds
-  updated_at INTEGER NOT NULL       -- Unix timestamp in milliseconds
+ id TEXT PRIMARY KEY,
+ data TEXT NOT NULL,
+ version INTEGER DEFAULT 1,
+ created_at INTEGER NOT NULL,
+ updated_at INTEGER NOT NULL,
+ idempotency_key TEXT,
+ request_hash TEXT
 );
-
--- Index for sorting by creation time (useful for future list management)
 CREATE INDEX IF NOT EXISTS idx_settlement_lists_created_at ON settlement_lists(created_at);
-
--- Future: Stripe integration columns (commented out for now)
--- ALTER TABLE settlement_lists ADD COLUMN stripe_customer_id TEXT;
--- ALTER TABLE settlement_lists ADD COLUMN stripe_subscription_id TEXT;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_settlement_lists_idempotency_key ON settlement_lists(idempotency_key) WHERE idempotency_key IS NOT NULL;
+CREATE TABLE IF NOT EXISTS save_receipts (
+ list_id TEXT PRIMARY KEY REFERENCES settlement_lists(id),
+ email_status TEXT NOT NULL CHECK (email_status IN ('pending','sending','sent','failed')),
+ email_attempts INTEGER NOT NULL DEFAULT 0,
+ claim_token TEXT,
+ updated_at INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS rate_limit_events (id INTEGER PRIMARY KEY AUTOINCREMENT, bucket TEXT NOT NULL, ts INTEGER NOT NULL);
+CREATE INDEX IF NOT EXISTS idx_rate_limit_events_bucket_ts ON rate_limit_events(bucket, ts);
+CREATE INDEX IF NOT EXISTS idx_rate_limit_events_ts ON rate_limit_events(ts);

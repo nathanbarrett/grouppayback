@@ -4,21 +4,39 @@ main = "workers/index.ts"
 
 [assets]
 directory = "./dist"
+binding = "ASSETS"
 not_found_handling = "single-page-application"
 
-# D1 Database binding
-# To create the database:
-#   wrangler d1 create grouppayback
-# Then update database_id below with the ID from the output
+# Local/default mode cannot send mail: no EMAIL binding and explicit kill switch.
+[vars]
+EMAIL_MODE = "mock"
+ALLOWED_ORIGINS = "http://localhost:5173,http://localhost:8787"
+
 [[d1_databases]]
 binding = "DB"
 database_name = "grouppayback"
 database_id = "642525e7-7cd4-42f3-982c-82d1aa6cdb25"
+migrations_dir = "migrations"
 
-# Production environment
+# Explicitly target the existing Worker, not an unused -production Worker.
+# Deploy only after review, sender onboarding, and approval (docs/email-preflight.md).
 [env.production]
-# Production D1 database (same database for now, can be split later)
+name = "grouppayback"
+
+[env.production.vars]
+# Production release approved; root sender onboarded via Wrangler Email Sending.
+EMAIL_MODE = "live"
+# Exact existing serving hostname verified in Wrangler deploy output and HTTPS.
+ALLOWED_ORIGINS = "https://grouppayback.nathan-barrett.workers.dev"
+
+[[env.production.send_email]]
+name = "EMAIL"
+allowed_sender_addresses = ["no-reply@grouppayback.com"]
+# Never use a live remote binding in local development, even with --env production.
+remote = false
+
 [[env.production.d1_databases]]
 binding = "DB"
 database_name = "grouppayback"
 database_id = "642525e7-7cd4-42f3-982c-82d1aa6cdb25"
+migrations_dir = "migrations"

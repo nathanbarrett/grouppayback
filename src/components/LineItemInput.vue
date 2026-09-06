@@ -101,7 +101,7 @@ function updateName(name: string) {
   <div class="flex items-center gap-2">
     <input
       type="text"
-      :value="item.name"
+      :value="item.name" maxlength="200"
       @input="updateName(($event.target as HTMLInputElement).value)"
       placeholder="Item name"
       class="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"

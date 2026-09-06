@@ -1,128 +1,38 @@
 import type { D1Database } from '@cloudflare/workers-types'
-import {
-  handleCreateList,
-  handleGetList,
-  handleUpdateList,
-} from './routes/lists'
-
-/**
- * Worker environment bindings
- */
-interface Env {
-  DB: D1Database
-  ASSETS: Fetcher
-}
-
-/**
- * CORS headers for API responses
- */
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET, POST, PUT, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type',
-}
-
-/**
- * Handle CORS preflight requests
- */
-function handleOptions(): Response {
-  return new Response(null, {
-    status: 204,
-    headers: corsHeaders,
-  })
-}
-
-/**
- * Add CORS headers to a response
- */
-function withCors(response: Response): Response {
-  const newHeaders = new Headers(response.headers)
-  for (const [key, value] of Object.entries(corsHeaders)) {
-    newHeaders.set(key, value)
-  }
-  return new Response(response.body, {
-    status: response.status,
-    statusText: response.statusText,
-    headers: newHeaders,
-  })
-}
-
-/**
- * Route API requests
- */
-async function handleApiRequest(
-  request: Request,
-  env: Env,
-  pathname: string
-): Promise<Response> {
-  const method = request.method
-
-  // Handle CORS preflight
-  if (method === 'OPTIONS') {
-    return handleOptions()
-  }
-
-  // Extract route parameters
-  const listsMatch = pathname.match(/^\/api\/lists(?:\/([A-Z0-9]{26}))?$/i)
-
-  if (listsMatch) {
-    const id = listsMatch[1]
-
-    // POST /api/lists - Create new list
-    if (method === 'POST' && !id) {
-      const response = await handleCreateList(request, env.DB)
-      return withCors(response)
-    }
-
-    // GET /api/lists/:id - Get list by ID
-    if (method === 'GET' && id) {
-      const response = await handleGetList(id.toUpperCase(), env.DB)
-      return withCors(response)
-    }
-
-    // PUT /api/lists/:id - Update list
-    if (method === 'PUT' && id) {
-      const response = await handleUpdateList(id.toUpperCase(), request, env.DB)
-      return withCors(response)
-    }
-  }
-
-  // Method not allowed or route not found
-  return withCors(
-    new Response(JSON.stringify({ error: 'Not found' }), {
-      status: 404,
-      headers: { 'Content-Type': 'application/json' },
-    })
-  )
-}
-
-/**
- * Main Worker fetch handler
- */
+import { handleCreateList, handleGetList, handleUpdateList, jsonResponse } from './routes/lists'
+import { ValidationError } from './lib/validate'
+import { PUBLIC_ORIGIN } from './lib/email'
+import type { EmailEnvironment } from './lib/save'
+interface Env extends EmailEnvironment { DB: D1Database; ASSETS: Fetcher; ALLOWED_ORIGINS?: string }
 export default {
-  async fetch(request: Request, env: Env): Promise<Response> {
-    const url = new URL(request.url)
-    const pathname = url.pathname
-
-    // Route API requests
-    if (pathname.startsWith('/api/')) {
-      try {
-        return await handleApiRequest(request, env, pathname)
-      } catch (error) {
-        console.error('API Error:', error)
-        return withCors(
-          new Response(
-            JSON.stringify({ error: 'Internal server error' }),
-            {
-              status: 500,
-              headers: { 'Content-Type': 'application/json' },
-            }
-          )
-        )
-      }
-    }
-
-    // Serve static assets for non-API routes
-    return env.ASSETS.fetch(request)
-  },
+ async fetch(request: Request, env: Env): Promise<Response> {
+  const path = new URL(request.url).pathname
+  if (!path.startsWith('/api/')) return env.ASSETS.fetch(request)
+  const origin = request.headers.get('Origin')
+  const allowed = [PUBLIC_ORIGIN,...(env.ALLOWED_ORIGINS?.split(',') ?? [])]
+  const cors = (response: Response) => {
+   response.headers.set('Vary','Origin')
+   if (origin && allowed.includes(origin)) response.headers.set('Access-Control-Allow-Origin',origin)
+   response.headers.set('Access-Control-Allow-Methods','GET, POST, PUT, OPTIONS')
+   response.headers.set('Access-Control-Allow-Headers','Content-Type')
+   return response
+  }
+  if (origin && !allowed.includes(origin)) return cors(jsonResponse({error:'Origin not allowed',code:'ORIGIN_NOT_ALLOWED'},403))
+  if (request.method === 'OPTIONS') return cors(new Response(null,{status:204}))
+  try {
+   const match = path.match(/^\/api\/lists(?:\/([A-Z0-9]{26}))?$/i)
+   if (match) {
+    const id = match[1]?.toUpperCase()
+    if (request.method === 'POST' && !id) return cors(await handleCreateList(request,env.DB,env))
+    if (request.method === 'GET' && id) return cors(await handleGetList(id,env.DB))
+    if (request.method === 'PUT' && id) return cors(await handleUpdateList(id,request,env.DB))
+   }
+   return cors(jsonResponse({error:'Not found'},404))
+  } catch (error) {
+   if (error instanceof ValidationError) return cors(jsonResponse({error:'Invalid request',code:error.code},error.code === 'PAYLOAD_TOO_LARGE' ? 413 : 400))
+   // Never log arbitrary error messages: provider and D1 errors may contain PII.
+   console.error('API_INTERNAL_ERROR')
+   return cors(jsonResponse({error:'Internal server error'},500))
+  }
+ }
 }
